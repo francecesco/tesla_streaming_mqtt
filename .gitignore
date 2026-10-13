@@ -1,0 +1,36 @@
+# NB: in .gitignore i commenti devono stare su righe proprie (un "# ..." in coda
+#     a un pattern diventerebbe parte del pattern e il file NON verrebbe ignorato).
+
+# ── Configurazione personale e segreti: MAI su git ─────────────────────
+# valori della propria installazione (dominio, IP, percorsi)
+config.env
+# client_id / client_secret app Tesla
+credentials.env
+# chiave privata EC: firma comandi e config inviate all'auto
+private-key.pem
+# chiave pubblica: è specifica della propria app (si rigenera da private-key.pem con 00-keys.sh)
+public-key.pem
+# token partner e OAuth (+ temporanei di rotazione)
+.partner_token
+.partner_token.*
+.tokens.json
+.tokens.*
+# note/contesto personali per Claude Code (caricate automaticamente, mai pubblicate)
+CLAUDE.local.md
+
+# ── Dati del veicolo / stato locale ───────────────────────────────────
+.vin
+.vehicles.json
+.fleet_status.json
+# payload inviato all'auto (contiene il VIN)
+.telemetry-config.json
+
+# ── Artefatti rigenerabili ────────────────────────────────────────────
+# tesla-http-proxy compilato da 04-telemetry-config.sh
+bin/
+# cert/chiave TLS localhost del proxy + log
+proxy/
+# catena certificati scaricata da 04-telemetry-config.sh
+certs/
+*.log
+.DS_Store

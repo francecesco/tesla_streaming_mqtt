@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tesla OAuth callback</title>
+<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:3rem auto;padding:0 1rem}code{display:block;word-break:break-all;background:#f2f2f2;padding:1rem;border-radius:.5rem;font-size:1.05rem}</style>
+</head><body>
+<h1>Tesla OAuth callback</h1>
+<p id="msg">Lettura parametri…</p>
+<code id="code"></code>
+<script>
+  // Pagina statica servita da Tailscale Funnel: mostra il "code" OAuth da incollare in 02-oauth.sh.
+  const p = new URLSearchParams(location.search);
+  const code = p.get("code"), err = p.get("error");
+  document.getElementById("msg").textContent = code
+    ? "Authorization code (monouso, scade in pochi minuti). Copialo nel terminale:"
+    : "Nessun code ricevuto. " + (err ? "Errore: " + err + " " + (p.get("error_description") || "") : "");
+  document.getElementById("code").textContent = code || "";
+</script>
+</body></html>

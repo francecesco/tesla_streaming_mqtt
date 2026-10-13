@@ -1,0 +1,19 @@
+# Fleet Telemetry – il container ascolta SOLO su 127.0.0.1:${FT_LOCAL_PORT}.
+# È esposto su Internet esclusivamente tramite Tailscale Funnel (TCP passthrough).
+# Le variabili arrivano dal file .env che setup.sh scrive accanto a questo file.
+name: fleet-telemetry
+services:
+  fleet-telemetry:
+    image: ${FT_IMAGE}
+    container_name: fleet-telemetry
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${FT_LOCAL_PORT}:4443"
+    volumes:
+      - ${SERVER_DATA_DIR}/config/config.json:/etc/fleet-telemetry/config.json:ro
+      - ${SERVER_DATA_DIR}/certs:/etc/certs/server:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
