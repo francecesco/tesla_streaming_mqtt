@@ -190,7 +190,8 @@ sequenceDiagram
 └── ha/                        lato Home Assistant
     ├── discovery.py           genera il messaggio MQTT discovery (dispositivo "Tesla" + 54 entità)
     ├── dashboard/
-    │   └── tesla-car-card.yaml  card button-card: profilo dell'auto con i dati agganciati sopra
+    │   ├── tesla-car-card.yaml  card button-card: profilo dell'auto con i dati agganciati sopra
+    │   └── tesla-cards.js     card JS: viaggi (mappa + elenco) e statistiche (km, costi, energia)
     └── assets/
         └── model3_side.webp   immagine di esempio (da sostituire con la propria auto)
 ```
@@ -426,6 +427,32 @@ anima in carica), in basso temperatura esterna, limite di carica, km. Ogni eleme
    Se la cartella `www` non esisteva, riavvia Home Assistant. Verifica: `https://<tuo-ha>/local/tesla/model3_side.webp`.
 3. Dashboard → *Modifica* → *Aggiungi card* → *Manuale* → incolla `ha/dashboard/tesla-car-card.yaml`.
    In una vista *sections* rende meglio in una sezione con `column_span: 2`, affiancata da una card mappa.
+
+### 3. Viaggi e statistiche (`ha/dashboard/tesla-cards.js`)
+
+Due card senza dipendenze HACS:
+
+- `custom:tesla-trips-card`: mappa (Leaflet + OpenStreetMap) col percorso del viaggio selezionato ed elenco
+  dei viaggi per giorno (orari, km, durata, media, batteria). I viaggi sono ricostruiti dallo storico del
+  recorder, quindi coprono gli ultimi `purge_keep_days` (default 10). Nomi dei luoghi: zone di HA, altrimenti
+  Nominatim (OSM) con cache locale.
+- `custom:tesla-stats-card`: km percorsi, costo delle ricariche, energia caricata del mese, con andamento
+  a 12 mesi dalle statistiche a lungo termine (tocca la curva per il valore di un mese).
+
+Installazione: copia il file in `/config/www/tesla/`, poi *Impostazioni → Dashboard → Risorse →*
+`/local/tesla/tesla-cards.js?v=1.0.2` (JavaScript module). Ad ogni aggiornamento copia **prima** il file e
+**poi** cambia `?v=`. Esempio:
+
+```yaml
+- type: custom:tesla-stats-card
+  odometer: [sensor.tesla_contachilometri]          # + eventuale contachilometri legacy
+  energy: [sensor.tesla_energia_ricarica_ac_sessione, sensor.tesla_energia_ricarica_dc_sessione]
+  energy_legacy: []                                  # es. sensor.<vecchia_integrazione>_energy_added
+  energy_home: sensor.<kwh_caricati_a_casa>          # opzionale (total_increasing)
+  cost: sensor.<costo_mensile_ricariche>             # opzionale, si azzera ogni mese
+- type: custom:tesla-trips-card
+  days: 10
+```
 
 **Usa la foto della tua auto.** `ha/assets/model3_side.webp` è un esempio (Model 3 2021–2023, bianca).
 Per sostituirla serve un profilo **laterale sinistro** (lato dello sportello di ricarica sulla Model 3/Y),

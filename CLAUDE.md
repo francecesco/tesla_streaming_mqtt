@@ -131,6 +131,17 @@ Flusso degli script (PC admin): `00-keys` → `server/setup.sh` (sul server) →
     larghezza piena): cambiare immagine/ritaglio = ricalibrare x/y;
   - `/local/*` è in cache 31 giorni: dopo aver sostituito l'immagine incrementare `?v=`.
 - Immagine: sfondo trasparente vero (non `mix-blend-mode`, che dipende dal colore della card).
+- Card JS `ha/dashboard/tesla-cards.js` (`tesla-trips-card`, `tesla-stats-card`), risorsa `/local/tesla/tesla-cards.js?v=<VERSION>`:
+  - aggiornamento: **prima** copiare il file in `/config/www/tesla/`, **poi** cambiare `?v=` della risorsa.
+    Al contrario, un refresh intermedio mette in cache (browser/Cloudflare) il file vecchio sotto l'URL nuovo;
+  - verificare cosa serve HA: `fetch('/local/tesla/tesla-cards.js?nocache='+Date.now())` e leggere `VERSION`;
+  - tile mappa: HA imposta `<meta name="referrer" content="same-origin">` → OSM risponde 403 "Access blocked"
+    se il tile layer non ha `referrerPolicy: 'strict-origin-when-cross-origin'`; le tile CARTO
+    `rastertiles/voyager` ora richiedono una API key;
+  - viaggi: ricostruiti dallo storico del recorder (marcia R/N/D → intervalli di guida; km dal contachilometri),
+    quindi visibili solo per `purge_keep_days` (default 10 giorni);
+  - statistiche: long-term statistics mensili (permanenti). Km = differenza tra le letture di fine mese
+    (massimo tra contachilometri nuovo e legacy); energia = max per mese tra sessioni AC+DC e sorgente legacy.
 
 ---
 
