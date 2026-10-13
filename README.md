@@ -23,13 +23,14 @@ home server, VPS) esposto su Internet tramite **Tailscale Funnel**:
 9. [Verifica](#verifica)
 10. [Modificare i campi in streaming](#modificare-i-campi-in-streaming)
 11. [Formato dei dati MQTT](#formato-dei-dati-mqtt)
-12. [Adattare ad altri server](#adattare-ad-altri-server)
-13. [Manutenzione e scadenze](#manutenzione-e-scadenze)
-14. [Troubleshooting](#troubleshooting)
-15. [Sicurezza](#sicurezza)
-16. [Costi](#costi)
-17. [Alternative scartate](#alternative-scartate)
-18. [Riferimenti](#riferimenti)
+12. [Home Assistant](#home-assistant)
+13. [Adattare ad altri server](#adattare-ad-altri-server)
+14. [Manutenzione e scadenze](#manutenzione-e-scadenze)
+15. [Troubleshooting](#troubleshooting)
+16. [Sicurezza](#sicurezza)
+17. [Costi](#costi)
+18. [Alternative scartate](#alternative-scartate)
+19. [Riferimenti](#riferimenti)
 
 ---
 
@@ -186,6 +187,12 @@ sequenceDiagram
     └── www/                   file statici serviti da Funnel su :443
         ├── index.txt
         └── callback.html      mostra il code OAuth
+└── ha/                        lato Home Assistant
+    ├── discovery.py           genera il messaggio MQTT discovery (dispositivo "Tesla" + 54 entità)
+    ├── dashboard/
+    │   └── tesla-car-card.yaml  card button-card: profilo dell'auto con i dati agganciati sopra
+    └── assets/
+        └── model3_side.webp   immagine di esempio (da sostituire con la propria auto)
 ```
 
 File **locali, mai versionati** (vedi `.gitignore`): `config.env`, `credentials.env`, `private-key.pem`,
@@ -386,6 +393,49 @@ fast charger); blocco, porte, sentry, climatizzazione, temperature interna/ester
 
 QoS 1, **retained**. Il **tipo di un campo può cambiare tra firmware** (numero ↔ stringa): nei template
 Home Assistant usare sempre `| float(0)` / `| int(0)`.
+
+---
+
+## Home Assistant
+
+### 1. Entità (MQTT discovery)
+
+`ha/discovery.py` genera **un solo** messaggio retained di *device discovery* che crea il dispositivo
+"Tesla" con tutte le entità: unità convertite (mi → km, km/h), enum tradotti in italiano, porte, TPMS in
+bar, `device_tracker` GPS, stato dello streaming (topic `connectivity`).
+
+```bash
+python3 ha/discovery.py --vin <VIN> --name Tesla --model "Model 3" > /tmp/discovery.json
+mosquitto_pub -h <broker> -u <utente> -P '<password>' -r -q 1 \
+  -t "homeassistant/device/tesla_$(echo <VIN> | tr 'A-Z' 'a-z')/config" -f /tmp/discovery.json
+# per rimuovere il dispositivo: stesso topic, payload vuoto, retained (-r -n)
+```
+
+Gli `entity_id` derivano dal nome del dispositivo e dei componenti (`sensor.tesla_batteria`,
+`binary_sensor.tesla_in_carica`, `device_tracker.tesla_posizione`, …): la card qui sotto li assume.
+
+### 2. Card "auto con i dati sopra"
+
+Profilo laterale dell'auto con i valori agganciati ai punti fisici: pressioni sulle ruote, temperatura
+abitacolo sul vetro, lucchetto sulla maniglia; porte/frunk/bagagliaio aperti, ricarica (kW, tempo residuo)
+sullo sportello e sentinella compaiono **solo quando servono**. In alto batteria + autonomia (la barra si
+anima in carica), in basso temperatura esterna, limite di carica, km. Ogni elemento apre il dettaglio.
+
+1. Installa **button-card** da HACS.
+2. Copia l'immagine in `/config/www/tesla/model3_side.webp` (es. con l'app *Studio Code Server*).
+   Se la cartella `www` non esisteva, riavvia Home Assistant. Verifica: `https://<tuo-ha>/local/tesla/model3_side.webp`.
+3. Dashboard → *Modifica* → *Aggiungi card* → *Manuale* → incolla `ha/dashboard/tesla-car-card.yaml`.
+   In una vista *sections* rende meglio in una sezione con `column_span: 2`, affiancata da una card mappa.
+
+**Usa la foto della tua auto.** `ha/assets/model3_side.webp` è un esempio (Model 3 2021–2023, bianca).
+Per sostituirla serve un profilo **laterale sinistro** (lato dello sportello di ricarica sulla Model 3/Y),
+auto intera, ripresa da 6–8 m con zoom 2x all'altezza del centro dell'auto; poi:
+
+- scontorno su sfondo trasparente (PNG/WebP con alpha, ombra a terra semitrasparente);
+- ritaglio stretto sull'auto, ~1400 px di larghezza, WebP ≈ 50 KB;
+- se proporzioni o inquadratura cambiano, ricalibra le coordinate `chip(x, y, …)` nella card
+  (percentuali dell'immagine: ruote, maniglia, vetro, sportello);
+- incrementa `?v=` nell'URL dell'immagine: i file `/local` restano in cache 31 giorni.
 
 ---
 

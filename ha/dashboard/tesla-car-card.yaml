@@ -1,0 +1,173 @@
+# Card "auto con i dati sopra" per Home Assistant (richiede custom:button-card da HACS).
+#
+# Uso: Dashboard → Modifica → Aggiungi card → Manuale → incolla questo YAML.
+# Consigliata in una vista "sections" dentro una sezione con column_span: 2.
+#
+# Immagine: /local/tesla/model3_side.webp  (= /config/www/tesla/model3_side.webp).
+#   Quella in ha/assets/ è un esempio (Model 3 2021-2023, bianca, profilo sinistro): sostituiscila con
+#   un profilo LATERALE SINISTRO della tua auto, PNG/WebP con sfondo trasparente, ~1400 px di larghezza,
+#   ritagliato stretto sull'auto. Se cambi immagine, ricalibra le coordinate x/y (in % dell'immagine)
+#   delle chip(...) e incrementa ?v= nell'URL (i file /local sono in cache 31 giorni).
+#
+# Entità: quelle create da ha/discovery.py con --name Tesla (prefisso sensor./binary_sensor.tesla_*).
+# triggers_update elenca TUTTE le entità lette: gli id sono composti dinamicamente (P + 'anteriore_...'),
+# quindi button-card non li rileverebbe da solo e la card non si aggiornerebbe.
+type: custom:button-card
+entity: sensor.tesla_batteria
+show_name: false
+show_icon: false
+show_state: false
+show_label: false
+tap_action:
+  action: none
+hold_action:
+  action: none
+triggers_update:
+  - binary_sensor.tesla_bagagliaio
+  - binary_sensor.tesla_cavo_collegato
+  - binary_sensor.tesla_frunk
+  - binary_sensor.tesla_in_carica
+  - binary_sensor.tesla_porta_anteriore_destra
+  - binary_sensor.tesla_porta_anteriore_sinistra
+  - binary_sensor.tesla_porta_posteriore_destra
+  - binary_sensor.tesla_porta_posteriore_sinistra
+  - binary_sensor.tesla_sbloccata
+  - binary_sensor.tesla_sentinella_attiva
+  - binary_sensor.tesla_sportello_di_ricarica
+  - binary_sensor.tesla_streaming_connesso
+  - device_tracker.tesla_posizione
+  - sensor.tesla_autonomia_nominale
+  - sensor.tesla_autonomia_stimata
+  - sensor.tesla_batteria
+  - sensor.tesla_climatizzazione
+  - sensor.tesla_contachilometri
+  - sensor.tesla_limite_di_carica
+  - sensor.tesla_modalita_sentinella
+  - sensor.tesla_nome_veicolo
+  - sensor.tesla_potenza_ricarica_ac
+  - sensor.tesla_potenza_ricarica_dc
+  - sensor.tesla_pressione_anteriore_destra
+  - sensor.tesla_pressione_anteriore_sinistra
+  - sensor.tesla_pressione_posteriore_destra
+  - sensor.tesla_pressione_posteriore_sinistra
+  - sensor.tesla_stato_ricarica
+  - sensor.tesla_temperatura_esterna
+  - sensor.tesla_temperatura_interna
+  - sensor.tesla_tempo_a_carica_completa
+  - sensor.tesla_velocita
+custom_fields:
+  html: |
+    [[[
+      const S = (id) => states[id] ? states[id].state : 'unknown';
+      const N = (id) => { const v = parseFloat(S(id)); return isNaN(v) ? null : v; };
+      const ON = (id) => S(id) === 'on';
+      const fmt = (v, d) => v === null ? '—' : v.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+      const ic = (i) => `<ha-icon icon="${i}"></ha-icon>`;
+      const tap = (e) => `onclick="event.stopPropagation();this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:'${e}'}}))"`;
+      const chip = (x, y, body, cls, e, tip) => `<div class="chip ${cls || ''}" style="left:${x}%;top:${y}%" title="${tip || ''}" ${e ? tap(e) : ''}>${body}</div>`;
+      const P = 'sensor.tesla_pressione_';
+      const tyre = (a, b) => { const l = N(P + a), r = N(P + b); const bad = [l, r].some((v) => v !== null && (v < 2.6 || v > 3.4)); return { cls: bad ? 'warn' : '', txt: `${fmt(l, 1)} · ${fmt(r, 1)}` }; };
+      const batt = N('sensor.tesla_batteria');
+      const lim = N('sensor.tesla_limite_di_carica') ?? 100;
+      const est = N('sensor.tesla_autonomia_stimata');
+      const rng = est !== null ? est : N('sensor.tesla_autonomia_nominale');
+      const charging = ON('binary_sensor.tesla_in_carica');
+      const plugged = ON('binary_sensor.tesla_cavo_collegato');
+      const online = ON('binary_sensor.tesla_streaming_connesso');
+      const spd = N('sensor.tesla_velocita');
+      const moving = online && spd !== null && spd > 0;
+      const z = S('device_tracker.tesla_posizione');
+      const where = z === 'home' ? 'Casa' : z === 'not_home' ? 'In giro' : (['unknown', 'unavailable'].includes(z) ? '—' : z);
+      const nm = S('sensor.tesla_nome_veicolo');
+      const name = ['unknown', 'unavailable', ''].includes(nm) ? 'Tesla' : nm;
+      const col = batt === null ? '#9e9e9e' : batt < 20 ? '#e53935' : batt < 50 ? '#fb8c00' : '#43a047';
+      const fill = charging ? `repeating-linear-gradient(45deg,${col} 0 8px,#81c784 8px 16px)` : col;
+      const sub = [ic('mdi:map-marker') + where, moving ? ic('mdi:speedometer') + `${Math.round(spd)} km/h` : (online ? ic('mdi:access-point') + 'Online' : ic('mdi:sleep') + 'In riposo')];
+      const sentry = ON('binary_sensor.tesla_sentinella_attiva');
+      const subh = [...sub.map((s) => `<span>${s}</span>`), sentry ? `<span class="red" ${tap('sensor.tesla_modalita_sentinella')}>${ic('mdi:eye')}Sentinella</span>` : ''].join('');
+      const c = [];
+      const tf = tyre('anteriore_sinistra', 'anteriore_destra');
+      const tr = tyre('posteriore_sinistra', 'posteriore_destra');
+      c.push(chip(17, 73.4, ic('mdi:tire') + tf.txt, tf.cls, P + 'anteriore_sinistra', 'Pneumatici anteriori sx · dx (bar)'));
+      c.push(chip(80.2, 73.4, ic('mdi:tire') + tr.txt, tr.cls, P + 'posteriore_sinistra', 'Pneumatici posteriori sx · dx (bar)'));
+      const tin = N('sensor.tesla_temperatura_interna');
+      const hvac = !['Spenta', 'unknown', 'unavailable'].includes(S('sensor.tesla_climatizzazione'));
+      c.push(chip(58, 25, ic(hvac ? 'mdi:fan' : 'mdi:thermometer') + `${fmt(tin, 1)}°`, hvac ? 'cool' : '', 'sensor.tesla_temperatura_interna', 'Temperatura abitacolo'));
+      const unl = ON('binary_sensor.tesla_sbloccata');
+      c.push(chip(47, 41, ic(unl ? 'mdi:lock-open-variant' : 'mdi:lock') + (unl ? 'Sbloccata' : ''), unl ? 'alert' : 'ok icon', 'binary_sensor.tesla_sbloccata', unl ? 'Sbloccata' : 'Bloccata'));
+      const D = 'binary_sensor.tesla_porta_';
+      const fo = [ON(D + 'anteriore_sinistra') && 'sx', ON(D + 'anteriore_destra') && 'dx'].filter(Boolean);
+      const ro = [ON(D + 'posteriore_sinistra') && 'sx', ON(D + 'posteriore_destra') && 'dx'].filter(Boolean);
+      if (fo.length) c.push(chip(41.7, 59.6, ic('mdi:car-door') + 'Porta ' + fo.join('+'), 'alert', D + 'anteriore_sinistra'));
+      if (ro.length) c.push(chip(65.6, 57.4, ic('mdi:car-door') + 'Porta ' + ro.join('+'), 'alert', D + 'posteriore_sinistra'));
+      if (ON('binary_sensor.tesla_frunk')) c.push(chip(5, 41.5, ic('mdi:car-select') + 'Frunk', 'alert l', 'binary_sensor.tesla_frunk'));
+      if (ON('binary_sensor.tesla_bagagliaio')) c.push(chip(88, 22, ic('mdi:car-back') + 'Bagagliaio', 'alert r', 'binary_sensor.tesla_bagagliaio'));
+      if (charging) {
+        const kw = Math.max(N('sensor.tesla_potenza_ricarica_ac') || 0, N('sensor.tesla_potenza_ricarica_dc') || 0);
+        const h = N('sensor.tesla_tempo_a_carica_completa');
+        const t = h === null ? '' : ` · ${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, '0')}m`;
+        c.push(chip(96, 38.5, ic('mdi:lightning-bolt') + `${fmt(kw, 1)} kW${t}`, 'chg r', 'sensor.tesla_stato_ricarica', 'In carica'));
+      } else if (plugged) {
+        c.push(chip(96, 38.5, ic('mdi:power-plug') + 'Collegata', 'chg r', 'sensor.tesla_stato_ricarica', S('sensor.tesla_stato_ricarica')));
+      } else if (ON('binary_sensor.tesla_sportello_di_ricarica')) {
+        c.push(chip(96, 38.5, ic('mdi:ev-plug-type2') + 'Sportello aperto', 'warn r', 'binary_sensor.tesla_sportello_di_ricarica'));
+      }
+      const tout = N('sensor.tesla_temperatura_esterna');
+      const odo = N('sensor.tesla_contachilometri');
+      const css = `<style>
+      .w{color:var(--primary-text-color);text-align:left}
+      .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+      .nm{font-size:20px;font-weight:600;line-height:1.25}
+      .sub{display:flex;flex-wrap:wrap;gap:12px;margin-top:3px;font-size:12.5px;color:var(--secondary-text-color)}
+      .sub span{display:inline-flex;align-items:center;gap:3px}
+      .sub ha-icon{--mdc-icon-size:15px}
+      .sub .red{color:#e53935;font-weight:600;cursor:pointer;pointer-events:auto}
+      .bt{text-align:right;cursor:pointer;pointer-events:auto}
+      .pct{font-size:34px;font-weight:700;line-height:1}
+      .pct small{font-size:16px;font-weight:500;margin-left:1px}
+      .rg{font-size:12.5px;color:var(--secondary-text-color);margin-top:3px}
+      .bar{position:relative;height:6px;border-radius:3px;background:var(--divider-color,#e5e5e5);margin:12px 0 0;overflow:hidden}
+      .fl{height:100%;border-radius:3px;transition:width .8s ease}
+      .fl.on{background-size:22.6px 22.6px !important;animation:mv 1s linear infinite}
+      @keyframes mv{to{background-position:22.6px 0}}
+      .lm{position:absolute;top:0;width:2px;height:100%;background:var(--primary-text-color);opacity:.35}
+      .stg{position:relative;margin:14px 0 4px}
+      .stg img{display:block;width:100%;height:auto;pointer-events:none;user-select:none}
+      .chip{position:absolute;transform:translate(-50%,-50%);display:inline-flex;align-items:center;gap:4px;padding:3px 9px 3px 6px;border-radius:999px;background:rgba(255,255,255,.9);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-shadow:0 1px 5px rgba(0,0,0,.18);font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;pointer-events:auto;color:#263238;line-height:18px}
+      .chip ha-icon{--mdc-icon-size:15px;color:#607d8b}
+      .chip.icon{padding:4px}
+      .chip.r{transform:translate(-100%,-50%)}
+      .chip.l{transform:translate(0,-50%)}
+      .chip.ok ha-icon{color:#2e7d32}
+      .chip.cool{color:#1565c0}.chip.cool ha-icon{color:#1e88e5}
+      .chip.warn{background:#fff3e0;color:#e65100}.chip.warn ha-icon{color:#ef6c00}
+      .chip.alert{background:#ffebee;color:#c62828}.chip.alert ha-icon{color:#e53935}
+      .chip.chg{background:#e8f5e9;color:#2e7d32}.chip.chg ha-icon{color:#43a047}
+      .ft{display:flex;justify-content:space-around;gap:8px;margin-top:10px;padding-top:12px;border-top:1px solid var(--divider-color,#eee);font-size:11.5px;color:var(--secondary-text-color);text-align:center}
+      .ft div{cursor:pointer;pointer-events:auto}
+      .ft b{display:block;font-size:14px;font-weight:600;color:var(--primary-text-color);margin-bottom:1px}
+      </style>`;
+      return `${css}<div class="w">
+      <div class="top"><div><div class="nm">${name}</div><div class="sub">${subh}</div></div>
+      <div class="bt" ${tap('sensor.tesla_batteria')}><div class="pct">${batt === null ? '—' : Math.round(batt)}<small>%</small></div><div class="rg">${rng === null ? '' : Math.round(rng) + ' km'}</div></div></div>
+      <div class="bar"><div class="fl ${charging ? 'on' : ''}" style="width:${batt || 0}%;background:${fill}"></div><div class="lm" style="left:calc(${lim}% - 1px)" title="Limite di carica ${lim}%"></div></div>
+      <div class="stg"><img src="/local/tesla/model3_side.webp?v=2" alt="">${c.join('')}</div>
+      <div class="ft">
+      <div ${tap('sensor.tesla_temperatura_esterna')}><b>${fmt(tout, 1)}°</b>Esterno</div>
+      <div ${tap('sensor.tesla_limite_di_carica')}><b>${Math.round(lim)}%</b>Limite</div>
+      <div ${tap('sensor.tesla_contachilometri')}><b>${odo === null ? '—' : Math.round(odo).toLocaleString('it-IT')}</b>km</div>
+      </div></div>`;
+    ]]]
+styles:
+  card:
+    - padding: 16px 16px 12px
+  grid:
+    - grid-template-areas: '"html"'
+    - grid-template-columns: 1fr
+  custom_fields:
+    html:
+      - justify-self: stretch
+      - width: 100%
+grid_options:
+  columns: full
+  rows: auto

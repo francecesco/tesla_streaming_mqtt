@@ -34,3 +34,9 @@ proxy/
 certs/
 *.log
 .DS_Store
+
+# ── Home Assistant ─────────────────────────────────────────────────────
+# sorgenti grezzi delle immagini (in repo va solo il .webp ottimizzato)
+ha/assets/*.png
+# file generati dall'app Claude nella cartella di lavoro
+Claude outputs/

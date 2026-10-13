@@ -117,6 +117,21 @@ Flusso degli script (PC admin): `00-keys` → `server/setup.sh` (sul server) →
 - Messaggi QoS 1 **retained**: dopo un riavvio i consumer ritrovano l'ultimo valore.
 - Verifica connessione lato broker: log `New client connected from <ip-server> as fleet-telemetry`.
 
+### Home Assistant (discovery e dashboard)
+- Discovery: **un** messaggio retained `homeassistant/device/tesla_<vin>/config` (VIN minuscolo).
+  Nei template un valore `'None'` → stato *unknown*; distanze/velocità arrivano in **miglia**.
+  Rinominare componenti/nome dispositivo cambia gli `entity_id` → rompe card e automazioni.
+- Card `ha/dashboard/tesla-car-card.yaml` (button-card, HTML generato in JS):
+  - con `tap_action: none` button-card mette `pointer-events: none` sulla card: ogni elemento
+    cliccabile deve avere `pointer-events: auto`, altrimenti il tocco non arriva (sintomo: "non succede nulla");
+  - il tocco apre il dettaglio con `CustomEvent('hass-more-info', {bubbles, composed, detail:{entityId}})`;
+  - `triggers_update` deve elencare **tutte** le entità lette: gli id sono composti a runtime e
+    button-card non li rileva → senza la lista la card non si aggiorna;
+  - le chip sono posizionate in **% dell'immagine** (contenitore `position:relative` con l'img a
+    larghezza piena): cambiare immagine/ritaglio = ricalibrare x/y;
+  - `/local/*` è in cache 31 giorni: dopo aver sostituito l'immagine incrementare `?v=`.
+- Immagine: sfondo trasparente vero (non `mix-blend-mode`, che dipende dal colore della card).
+
 ---
 
 ## 4. Convenzioni degli script
