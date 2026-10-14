@@ -7,7 +7,7 @@
  * Nessuna dipendenza da HACS. La mappa usa Leaflet (caricato da unpkg) e le tile OpenStreetMap;
  * i nomi dei luoghi fuori dalle zone di HA arrivano da Nominatim (OSM), con cache locale.
  */
-const VERSION = '1.0.2';
+const VERSION = '1.1.0';
 
 const fmtNum = (v, d = 0) =>
   v === null || v === undefined || isNaN(v)
@@ -387,12 +387,20 @@ class TeslaStatsCard extends HTMLElement {
         .sb { font-size: 12.5px; margin-top: 2px; }
         .sb .good { color: #2e7d32; } .sb .bad { color: #d84315; }
         .sp { position: relative; height: 64px; touch-action: none; }
-        .sp svg { width: 100%; height: 100%; overflow: visible; display: block; }
+        .bars { display: flex; align-items: flex-end; gap: 3px; height: 100%; }
+        .col { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+        .b { width: 100%; background: var(--c); opacity: .32; border-radius: 4px 4px 1.5px 1.5px; transition: opacity .15s, height .6s ease; }
+        .b.cur { opacity: 1; }
+        .b.nd { background: var(--divider-color, #e5e7eb); opacity: 1; }
+        .sp.hov .b:not(.nd) { opacity: .22; }
+        .sp.hov .col.hl .b:not(.nd) { opacity: 1; }
         .tip { position: absolute; top: -6px; transform: translateX(-50%); font-size: 11px; font-weight: 600; white-space: nowrap;
                background: var(--card-background-color, #fff); padding: 1px 6px; border-radius: 6px;
                box-shadow: 0 1px 4px rgba(0,0,0,.15); pointer-events: none; opacity: 0; transition: opacity .12s; }
         .sp:hover .tip, .sp.touch .tip { opacity: 1; }
-        .ax { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--secondary-text-color); margin-top: 2px; }
+        .ax { display: flex; gap: 3px; font-size: 10px; color: var(--secondary-text-color); margin-top: 3px; }
+        .ax span { flex: 1; text-align: center; }
+        .ax span.cur { color: var(--primary-text-color); font-weight: 600; }
       </style>
       <ha-card>
         <div class="hd"><span class="ti">${this._cfg.title}</span><span class="mo muted"></span></div>
@@ -499,60 +507,41 @@ class TeslaStatsCard extends HTMLElement {
   }
 
   _row(label, value, unit, sub, series, labels, u, color, dec = 0) {
-    const w = 200, h = 64, pad = 5;
-    const vals = series.map((v) => (v === null ? null : v));
-    const known = vals.filter((v) => v !== null);
-    const max = Math.max(...known, 0) || 1;
-    const x = (i) => pad + i * (w - 2 * pad) / (vals.length - 1);
-    const y = (v) => h - 8 - (v / max) * (h - 18);
-    const pts = vals.map((v, i) => (v === null ? null : [x(i), y(v)]));
-    // curva morbida (Catmull-Rom → Bézier) sui tratti con dati
-    const segs = [];
-    let cur = [];
-    pts.forEach((p) => { if (p) cur.push(p); else if (cur.length) { segs.push(cur); cur = []; } });
-    if (cur.length) segs.push(cur);
-    const path = (s) => s.map((p, i) => {
-      if (!i) return `M${p[0]},${p[1]}`;
-      const p0 = s[i - 2] || s[i - 1], p1 = s[i - 1], p3 = s[i + 1] || p;
-      const c1 = [p1[0] + (p[0] - p0[0]) / 6, p1[1] + (p[1] - p0[1]) / 6];
-      const c2 = [p[0] - (p3[0] - p1[0]) / 6, p[1] - (p3[1] - p1[1]) / 6];
-      return `C${c1[0]},${c1[1]} ${c2[0]},${c2[1]} ${p[0]},${p[1]}`;
-    }).join(' ');
-    const gid = `g${Math.random().toString(36).slice(2, 8)}`;
-    const last = pts[pts.length - 1];
-    const svg = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-      <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="${color}" stop-opacity=".28"/><stop offset="1" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
-      ${segs.map((s) => s.length > 1 ? `<path d="${path(s)} L${s[s.length - 1][0]},${h} L${s[0][0]},${h} Z" fill="url(#${gid})"/>` : '').join('')}
-      ${segs.map((s) => s.length > 1 ? `<path d="${path(s)}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` : '').join('')}
-      <line class="cur" x1="0" x2="0" y1="0" y2="${h}" stroke="${color}" stroke-opacity=".35" stroke-dasharray="2 3" vector-effect="non-scaling-stroke" style="display:none"/>
-      ${last ? `<circle cx="${last[0]}" cy="${last[1]}" r="3.6" fill="${color}" stroke="#fff" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : ''}
-    </svg>`;
-    const data = JSON.stringify(vals.map((v, i) => [labels[i], v, x(i) / w]));
-    const firstLbl = labels[vals.findIndex((v) => v !== null)] || labels[0];
+    // istogramma a colonne verticali: mese corrente pieno, mesi precedenti attenuati
+    const vals = series.map((v) => (v === null || v === undefined ? null : v));
+    const max = Math.max(...vals.filter((v) => v !== null), 0) || 1;
+    const L = vals.length - 1;
+    const bars = vals.map((v, i) => {
+      const hgt = v === null ? 0 : Math.max(2, (v / max) * 100);
+      return `<div class="col" data-i="${i}"><div class="b ${i === L ? 'cur' : ''} ${v === null ? 'nd' : ''}"
+        style="height:${v === null ? 3 : hgt}%;--c:${color}"></div></div>`;
+    }).join('');
+    const ax = labels.map((l, i) => `<span class="${i === L ? 'cur' : ''}">${l.charAt(0).toUpperCase()}</span>`).join('');
+    const data = JSON.stringify(vals.map((v, i) => [labels[i], v]));
     return `<div class="row">
       <div><div class="lb">${label}</div><div class="vl">${value}<small>${unit}</small></div><div class="sb muted">${sub}</div></div>
-      <div><div class="sp" data-u="${u}" data-d="${dec}" data-v='${data}'>${svg}<div class="tip"></div></div>
-        <div class="ax"><span>${firstLbl}</span><span>${labels[labels.length - 1]}</span></div></div>
+      <div><div class="sp" data-u="${u}" data-d="${dec}" data-v='${data}'><div class="bars">${bars}</div><div class="tip"></div></div>
+        <div class="ax">${ax}</div></div>
     </div>`;
   }
 
   _wireTip(el) {
-    const data = JSON.parse(el.dataset.v), tip = el.querySelector('.tip'), line = el.querySelector('.cur');
+    const data = JSON.parse(el.dataset.v), tip = el.querySelector('.tip');
+    const cols = [...el.querySelectorAll('.col')];
     const u = el.dataset.u, dec = Number(el.dataset.d);
     const show = (clientX) => {
       const r = el.getBoundingClientRect();
-      const fx = (clientX - r.left) / r.width;
-      let best = 0;
-      data.forEach((d, i) => { if (Math.abs(d[2] - fx) < Math.abs(data[best][2] - fx)) best = i; });
-      const [lbl, v, px] = data[best];
+      const i = Math.min(cols.length - 1, Math.max(0, Math.floor((clientX - r.left) / r.width * cols.length)));
+      const [lbl, v] = data[i];
+      cols.forEach((c, j) => c.classList.toggle('hl', j === i));
+      el.classList.add('hov');
       tip.textContent = `${lbl} · ${v === null ? 'n.d.' : `${fmtNum(v, dec)} ${u}`}`;
-      tip.style.left = `${Math.min(Math.max(px * 100, 12), 88)}%`;
-      line.setAttribute('x1', px * 200); line.setAttribute('x2', px * 200); line.style.display = '';
+      tip.style.left = `${Math.min(Math.max((i + 0.5) / cols.length * 100, 14), 86)}%`;
     };
+    const hide = () => { el.classList.remove('touch', 'hov'); cols.forEach((c) => c.classList.remove('hl')); };
     el.addEventListener('pointermove', (e) => show(e.clientX));
     el.addEventListener('pointerdown', (e) => { el.classList.add('touch'); show(e.clientX); });
-    el.addEventListener('pointerleave', () => { el.classList.remove('touch'); line.style.display = 'none'; });
+    el.addEventListener('pointerleave', hide);
   }
 }
 
