@@ -121,6 +121,13 @@ Flusso degli script (PC admin): `00-keys` → `server/setup.sh` (sul server) →
 - Discovery: **un** messaggio retained `homeassistant/device/tesla_<vin>/config` (VIN minuscolo).
   Nei template un valore `'None'` → stato *unknown*; distanze/velocità arrivano in **miglia**.
   Rinominare componenti/nome dispositivo cambia gli `entity_id` → rompe card e automazioni.
+- `connectivity`: l'auto può avere **due connessioni aperte** e chiuderne una mentre l'altra trasmette
+  (15/10: DISCONNECTED alle 20:09:26, dati ogni 10 s fino alle 20:10:07, nessun CONNECTED in mezzo).
+  Il sensore "Streaming connesso" tiene l'elenco degli id aperti nell'attributo `connessioni_aperte`
+  (template con `this`, idempotenti, voci > 24 h scartate). Non usarlo come condizione di automazioni
+  che devono reagire in tempo reale: meglio un dato fresco (es. marcia D/R/N da N minuti).
+- Ripubblicare la discovery da HA: `mqtt.publish` retained con il JSON generato da `discovery.py`;
+  poi verificare con `mqtt/device/debug_info` che i payload caricati coincidano col file.
 - Card `ha/dashboard/tesla-car-card.yaml` (button-card, HTML generato in JS):
   - con `tap_action: none` button-card mette `pointer-events: none` sulla card: ogni elemento
     cliccabile deve avere `pointer-events: auto`, altrimenti il tocco non arriva (sintomo: "non succede nulla");

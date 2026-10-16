@@ -395,6 +395,11 @@ fast charger); blocco, porte, sentry, climatizzazione, temperature interna/ester
 QoS 1, **retained**. Il **tipo di un campo può cambiare tra firmware** (numero ↔ stringa): nei template
 Home Assistant usare sempre `| float(0)` / `| int(0)`.
 
+**Connettività:** un evento per connessione. L'auto può tenere aperte due connessioni insieme e
+chiuderne una mentre l'altra continua a trasmettere, quindi l'ultimo evento ricevuto non basta a dire
+se è collegata. Il sensore "Streaming connesso" generato da `ha/discovery.py` tiene l'elenco delle
+connessioni aperte (attributo `connessioni_aperte`) ed è acceso finché ne resta almeno una.
+
 ---
 
 ## Home Assistant

@@ -191,9 +191,31 @@ def build(vin, base, name, model):
                state_class="measurement", suggested_display_precision=2)
 
     # ── Diagnostica ───────────────────────────────────────────────────────────
-    add("streaming", "binary_sensor", "Streaming connesso", f"{base}/{vin}/connectivity",
-        "{{ ('ON' if value_json.Status == 'CONNECTED' else 'OFF') if value_json is mapping else 'None' }}",
-        payload_on="ON", payload_off="OFF", device_class="connectivity", entity_category="diagnostic")
+    # Connettività. Il topic riceve un evento per connessione: {ConnectionId, Status, CreatedAt}.
+    # L'auto a volte tiene aperte DUE connessioni insieme e ne chiude una mentre l'altra continua a
+    # trasmettere (visto il 15/10: DISCONNECTED alle 20:09:26, dati ogni 10 s fino alle 20:10:07).
+    # Guardare solo l'ultimo evento darebbe "off" con i dati che arrivano. Si tiene quindi l'elenco
+    # delle connessioni aperte nell'attributo "connessioni_aperte" (id -> CreatedAt): CONNECTED
+    # aggiunge, DISCONNECTED toglie, il sensore è "on" se l'elenco non è vuoto. Le voci più vecchie
+    # di 24 h vengono scartate, così un DISCONNECTED perso non lascia il sensore acceso per sempre.
+    # I due template partono entrambi dagli attributi precedenti + il messaggio e il calcolo è
+    # idempotente, quindi il risultato non dipende dall'ordine in cui HA li applica.
+    conn = f"{base}/{vin}/connectivity"
+    altre_aperte = ("{%- set old = this.attributes.get('connessioni_aperte') or {} -%}"
+                    "{%- set id = value_json.ConnectionId -%}")
+    filtro = ("{%- for k, t in old.items() if k != id and as_timestamp(t, 0) > as_timestamp(now()) - 86400 -%}")
+    add("streaming", "binary_sensor", "Streaming connesso", conn,
+        "{%- if value_json is not mapping -%}None{%- else -%}" + altre_aperte +
+        "{%- set ns = namespace(n=0) -%}" + filtro + "{%- set ns.n = ns.n + 1 -%}{%- endfor -%}"
+        "{{ 'ON' if value_json.Status == 'CONNECTED' or ns.n > 0 else 'OFF' }}{%- endif -%}",
+        payload_on="ON", payload_off="OFF", device_class="connectivity", entity_category="diagnostic",
+        json_attributes_topic=conn,
+        json_attributes_template=(
+            "{%- if value_json is mapping -%}" + altre_aperte +
+            "{%- set ns = namespace(d={}) -%}" + filtro + "{%- set ns.d = dict(ns.d, **{k: t}) -%}{%- endfor -%}"
+            "{%- if value_json.Status == 'CONNECTED' -%}{%- set ns.d = dict(ns.d, **{id: value_json.CreatedAt}) -%}{%- endif -%}"
+            "{{ {'connessioni_aperte': ns.d} | tojson }}"
+            "{%- else -%}{{ {'connessioni_aperte': this.attributes.get('connessioni_aperte') or {}} | tojson }}{%- endif -%}"))
     sensor("firmware", "Version", "Firmware", "{{ value_json if value_json is string else 'None' }}",
            icon="mdi:update", entity_category="diagnostic")
     sensor("vehicle_name", "VehicleName", "Nome veicolo", "{{ value_json if value_json is string else 'None' }}",
