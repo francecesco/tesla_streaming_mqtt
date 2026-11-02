@@ -12,7 +12,7 @@
  * quindi "Casa" = totale − Tesla − clima. Colori delle fasce assegnati in base al prezzo
  * (la più cara rossa, la più economica verde). Nessuna dipendenza esterna.
  */
-const E_VERSION = '1.3.0';
+const E_VERSION = '1.6.0';
 
 const nf = (v, d = 0) => (v === null || v === undefined || isNaN(v) ? '—'
   : Number(v).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: 'always' }));
@@ -181,7 +181,18 @@ const PAL = ['#8b5cf6', '#14b8a6', '#f97316', '#e11d48', '#eab308', '#6366f1', '
 class EnergiaFlowCard extends Base {
   _init() {
     this._css = `
-      svg.fl { width: 100%; height: auto; display: block; margin-top: 6px; }
+      .tot { text-align: right; line-height: 1.25; }
+      .tot .tk { font-size: 18px; font-weight: 700; display: block; white-space: nowrap; }
+      .tot .mo { font-size: 11px; }
+      .bars { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+      .fb { display: grid; grid-template-columns: 118px 1fr auto; gap: 8px; align-items: center; font-size: 12.5px; }
+      .fb .n { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .fb .n i { width: 9px; height: 9px; border-radius: 3px; flex: 0 0 auto; }
+      .fb .bar { height: 15px; border-radius: 5px; background: var(--divider-color); overflow: hidden; }
+      .fb .bar div { height: 100%; border-radius: 5px; transition: width .5s ease; }
+      .fb .w { text-align: right; white-space: nowrap; color: var(--secondary-text-color); }
+      .fb .w b { color: var(--primary-text-color); font-weight: 600; }
+      .sep { margin: 8px 0 3px; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--secondary-text-color); border-top: 1px solid var(--divider-color); padding-top: 7px; }
       .now { display: flex; justify-content: space-between; align-items: baseline; margin-top: 14px; }
       .now .v { font-size: 22px; font-weight: 700; } .now .v small { font-size: 13px; font-weight: 500; }
       .hb { display: grid; grid-template-columns: 104px 1fr 58px; gap: 8px; align-items: center; font-size: 12.5px; margin: 6px 0; }
@@ -191,8 +202,8 @@ class EnergiaFlowCard extends Base {
       .hb .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .nt { font-size: 11px; margin-top: 2px; }`;
     const r = this._shadow(`
-      <div class="hd"><span class="ti">Dove va l'energia</span><span class="muted mo" style="font-size:12.5px"></span></div>
-      <svg class="fl" viewBox="0 0 340 220" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="hd"><span class="ti">Dove va l'energia</span><span class="tot"><b class="tk"></b><span class="mo muted"></span></span></div>
+      <div class="bars"></div>
       <div class="nt muted"></div>
       <div class="now"><span class="lb">Adesso</span><span class="v"></span></div>
       <div class="list"></div>`);
@@ -255,33 +266,28 @@ class EnergiaFlowCard extends Base {
     const rest = Math.max(0, tot - measured);
     if (this._base && rest > 0) {
       const always = Math.min(rest, this._base.kw * this._base.hours);
-      items.push({ n: 'Sempre acceso', pre: `~${nf(this._base.kw * 1000)} W · `, k: always, e: always * pm, col: '#64748b', st: true });
-      items.push({ n: 'Saltuari', k: rest - always, e: (rest - always) * pm, col: '#cbd5e1', st: true });
-    } else items.push({ n: 'Non misurato', k: rest, e: rest * pm, col: '#94a3b8', st: true });
+      items.push({ n: 'Sempre acceso', pre: `~${nf(this._base.kw * 1000)} W · `, k: always, e: always * pm, col: '#64748b', st: true, bg: true });
+      items.push({ n: 'Saltuari', k: rest - always, e: (rest - always) * pm, col: '#cbd5e1', st: true, bg: true });
+    } else items.push({ n: 'Non misurato', k: rest, e: rest * pm, col: '#94a3b8', st: true, bg: true });
     items = items.filter((x) => x.k > 0.05);
-    // geometria: bande proporzionali; ogni destinazione occupa almeno LH px così le etichette non si sovrappongono
-    const top = 8, x0 = 20, x1 = 200, avail = 190, gap = 4, LH = 30;
+    // barre orizzontali ordinate (sostituiscono il sankey): piu' leggibili, nessun incrocio
     const Ts = sum(items.map((x) => x.k)) || 1;
-    const hs = items.map((x) => Math.max(1.5, x.k / Ts * avail));
-    let ys = top, yd = top, svg = '', bottom = 0;
-    const mx = (x0 + 12 + x1) / 2;
-    items.forEach((it, i) => {
-      const hh = hs[i], block = Math.max(hh, LH);
-      const s0 = ys, s1 = ys + hh, d0 = yd + (block - hh) / 2, d1 = d0 + hh, cy = yd + block / 2;
-      svg += `<path d="M${x0 + 12},${s0} C${mx},${s0} ${mx},${d0} ${x1},${d0} L${x1},${d1} C${mx},${d1} ${mx},${s1} ${x0 + 12},${s1} Z" fill="${it.col}" opacity=".26"/>`;
-      svg += `<rect x="${x1}" y="${d0}" width="7" height="${hh}" rx="2" fill="${it.col}"/>`;
-      const pct = Math.round(it.k / Ts * 100);
-      svg += `<text x="${x1 + 14}" y="${cy - 2}" style="font-size:11.5px;font-weight:600;fill:var(--primary-text-color)">${it.n} <tspan style="font-weight:400;fill:var(--secondary-text-color)">${pct}%</tspan></text>`;
-      svg += `<text x="${x1 + 14}" y="${cy + 11}" style="font-size:10px;fill:var(--secondary-text-color)">${it.pre || ''}${nf(it.k, it.k < 10 ? 1 : 0)} kWh · ${it.st ? '~' : ''}${nf(it.e, 2)} €</text>`;
-      ys = s1; yd += block + gap; bottom = Math.max(bottom, yd);
+    const max = Math.max(...items.map((x) => x.k), 0.001);
+    this.$('.tk').textContent = `${nf(tot)} kWh`;
+    let bars = '', sep = false;
+    items.forEach((it) => {
+      if (it.bg && !sep) { bars += `<div class="sep">Non attribuiti</div>`; sep = true; }
+      const wpc = Math.max(2, it.k / max * 100);
+      const fill = it.bg
+        ? `background:repeating-linear-gradient(135deg, ${it.col} 0 5px, transparent 5px 10px);opacity:.9`
+        : `background:${it.col}`;
+      bars += `<div class="fb">`
+        + `<span class="n"><i style="background:${it.col}"></i>${it.n}</span>`
+        + `<div class="bar"><div style="width:${wpc}%;${fill}"></div></div>`
+        + `<span class="w"><b>${it.pre || ''}${nf(it.k, it.k < 10 ? 1 : 0)}</b> kWh · ${it.st ? '~' : ''}${nf(it.e, 2)} €</span>`
+        + `</div>`;
     });
-    const srcH = ys - top;
-    svg = `<rect x="${x0}" y="${top}" width="12" height="${srcH}" rx="3" fill="var(--secondary-text-color)" opacity=".75"/>`
-      + `<text x="${x0 + 6}" y="${top + srcH + 14}" text-anchor="middle" style="font-size:10.5px;fill:var(--secondary-text-color)">Rete</text>`
-      + `<text x="${x0 + 6}" y="${top + srcH + 26}" text-anchor="middle" style="font-size:10.5px;font-weight:600;fill:var(--primary-text-color)">${nf(tot)} kWh</text>` + svg;
-    const H = Math.max(bottom, top + srcH + 30) + 6;
-    this.$('svg').setAttribute('viewBox', `0 0 340 ${H}`);
-    this.$('svg').innerHTML = svg;
+    this.$('.bars').innerHTML = bars;
     this.$('.nt').textContent = `~ costo stimato al prezzo medio del mese (${nf(pm, 3)} €/kWh); Tesla e clima calcolati per fascia.`
       + (this._base ? ` Sempre acceso: consumo di fondo non misurato (standby). Saltuari: ${c.etichetta_saltuari || 'bollitore, lavastoviglie, phon, Bimby, luci'}.` : '');
   }
@@ -330,13 +336,19 @@ class EnergiaDayCard extends Base {
       .lane em { position: absolute; left: 0; top: 0; font-size: 10px; font-style: normal; color: var(--secondary-text-color); background: var(--card-background-color, #fff); padding-right: 4px; line-height: 14px; }
 .fs { margin-top: 10px; } .fs .seg { height: 10px; margin: 0 0 6px; }
       .ymax { position: absolute; left: 6px; top: 4px; font-size: 10.5px; color: var(--secondary-text-color); pointer-events: none; }
-      .hx { display: flex; justify-content: space-between; font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }`;
+      .bs { display: flex; height: 16px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+      .bs span { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--primary-text-color); white-space: nowrap; overflow: hidden; }
+      .hx { position: relative; height: 14px; font-size: 10px; color: var(--secondary-text-color); margin-top: 2px; }
+      .hx span { position: absolute; transform: translateX(-50%); }
+      .hx span:first-child { transform: none; } .hx span:last-child { transform: translateX(-100%); }
+      .hx span.b { font-weight: 700; }
+      .bl span { position: absolute; top: 3px; font-size: 10px; font-weight: 700; pointer-events: none; }`;
     const r = this._shadow(`
       <div class="hd"><span class="ti">La giornata</span><span class="nav"><button class="pv">‹</button><span class="dl muted" style="font-size:12.5px;min-width:86px;text-align:center"></span><button class="nx">›</button></span></div>
       <div class="top" style="margin-top:6px"><div class="kp"><div><div class="lb">Costo</div><span class="v cs">—</span></div><div><div class="lb">Consumo</div><span class="v kw">—</span></div></div><div class="nw muted"></div></div>
       <div class="fs"><div class="seg sd"></div><div class="leg ld"></div></div>
-      <div class="chart"><svg viewBox="0 0 480 150" preserveAspectRatio="none"></svg><span class="ymax"></span><div class="tip"></div></div>
-      <div class="hx"><span>0</span><span>6</span><span>12</span><span>18</span><span>24</span></div>
+      <div class="chart"><svg viewBox="0 0 480 150" preserveAspectRatio="none"></svg><span class="ymax"></span><div class="bl"></div><div class="tip"></div></div>
+      <div class="bs"></div><div class="hx"></div>
       <div class="ev"></div><div class="leg lg" style="margin-top:8px"></div>`);
     this.$ = (s) => r.querySelector(s);
     this.$('.pv').addEventListener('click', () => { if (this._off < 9) { this._off++; this._refresh(); } });
@@ -367,7 +379,12 @@ class EnergiaDayCard extends Base {
     const p = h.states[c.potenza]; let w = parseFloat(p?.state);
     if (!isNaN(w) && (p.attributes.unit_of_measurement || '').toLowerCase() === 'kw') w *= 1000;
     this._bands(c.kwh_giorno_fasce.map((id) => num(h, id)));
-    this.$('.nw').innerHTML = `adesso <b>${isNaN(w) ? '—' : w >= 1000 ? nf(w / 1000, 2) + ' kW' : nf(w) + ' W'}</b><br>${h.states[c.fascia]?.state || ''} · ${nf(num(h, c.prezzo_attuale), 3)} €/kWh`;
+    // prossimo cambio di fascia (festivo noto solo per oggi; i giorni successivi si assumono feriali)
+    const nowD = new Date(), festNow = h.states[c.festivo]?.state === 'on', curB = bandAt(nowD, festNow);
+    let nx = null;
+    for (let k = 1; k <= 48 && !nx; k++) { const t = new Date(nowD.getTime() + k * 36e5); t.setMinutes(0, 0, 0); if (bandAt(t, t.toDateString() === nowD.toDateString() && festNow) !== curB) nx = t; }
+    const fino = nx ? ` · fino ${nx.toDateString() === nowD.toDateString() ? 'alle' : 'a ' + nx.toLocaleDateString('it-IT', { weekday: 'short' })} ${nx.getHours()}:00` : '';
+    this.$('.nw').innerHTML = `adesso <b>${isNaN(w) ? '—' : w >= 1000 ? nf(w / 1000, 2) + ' kW' : nf(w) + ' W'}</b><br>${h.states[c.fascia]?.state || ''} · ${nf(num(h, c.prezzo_attuale), 3)} €/kWh${fino}`;
   }
 
   // ripartizione della giornata per fascia: kWh e € (prezzo della fascia)
@@ -417,14 +434,16 @@ class EnergiaDayCard extends Base {
     const bc = bandColors(h, c.prezzi);
     let svg = '';
     // sfondo per fascia: blocchi contigui della stessa fascia (niente righe tra un'ora e l'altra)
-    let runStart = 0, runBand = bandAt(d0, this._fest);
+    const runs = []; let runStart = 0, runBand = bandAt(d0, this._fest);
     for (let hr = 1; hr <= 24; hr++) {
       const b = hr < 24 ? bandAt(new Date(d0.getTime() + hr * 36e5), this._fest) : -1;
-      if (b !== runBand) {
-        svg += `<rect x="${runStart * W / 24}" y="0" width="${(hr - runStart) * W / 24}" height="${H}" fill="${bc[runBand]}" opacity=".12"/>`;
-        runStart = hr; runBand = b;
-      }
+      if (b !== runBand) { runs.push({ b: runBand, s: runStart, e: hr }); runStart = hr; runBand = b; }
     }
+    runs.forEach((r) => { svg += `<rect x="${r.s * W / 24}" y="0" width="${(r.e - r.s) * W / 24}" height="${H}" fill="${bc[r.b]}" opacity=".12"/>`; });
+    // griglia oraria sottile; ai cambi di fascia una linea tratteggiata nel colore della fascia che inizia
+    const bounds = runs.slice(0, -1).map((r) => r.e), startBand = {}; runs.forEach((r) => { startBand[r.s] = r.b; });
+    for (let hr = 1; hr < 24; hr++) if (!bounds.includes(hr)) svg += `<line x1="${hr * W / 24}" x2="${hr * W / 24}" y1="0" y2="${H}" stroke="var(--primary-text-color)" stroke-opacity=".07" vector-effect="non-scaling-stroke"/>`;
+    bounds.forEach((hr) => { svg += `<line x1="${hr * W / 24}" x2="${hr * W / 24}" y1="0" y2="${H}" stroke="${bc[startBand[hr]]}" stroke-opacity=".55" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>`; });
     const x = (i) => (i + 0.5) * W / NB, y = (v) => H - bot - v / max * (H - top - bot);
     let line = '', area = '', open = false, firstX = 0, lastX = 0;
     buckets.forEach((v, i) => {
@@ -440,6 +459,16 @@ class EnergiaDayCard extends Base {
     svg += `<line class="cur" x1="0" x2="0" y1="0" y2="${H}" stroke="var(--primary-text-color)" stroke-opacity=".4" vector-effect="non-scaling-stroke" style="display:none"/>`;
     this.$('svg').innerHTML = svg;
     this.$('.ymax').textContent = `${nf(max / 1.1, 1)} kW`;
+    // striscia delle fasce + asse delle ore sugli orari reali di cambio fascia (0/6/12/18/24 se la fascia e' una sola)
+    this.$('.bs').innerHTML = runs.map((r) => `<span title="F${r.b + 1} ${r.s}–${r.e}" style="width:${(r.e - r.s) / 24 * 100}%;background:${bc[r.b]}8c">${r.e - r.s >= 2 ? `F${r.b + 1}` : ''}</span>`).join('');
+    // asse: ogni 2 ore, piu' i cambi di fascia in grassetto nel loro colore; i numeri regolari a ridosso di un confine (<= 1 h) si tolgono
+    const marks = new Set([0, 24, ...bounds]);
+    for (let t = 2; t < 24; t += 2) if (!bounds.some((b) => Math.abs(b - t) <= 1)) marks.add(t);
+    this.$('.hx').innerHTML = [...marks].sort((a, b) => a - b).map((t) => { const b = bounds.includes(t);
+      return `<span class="${b ? 'b' : ''}" style="left:${t / 24 * 100}%${b ? `;color:${bc[startBand[t]]}` : ''}">${t}</span>`; }).join('');
+    // ora del cambio fascia in alto nel grafico (HTML, non <text> SVG: l'SVG e' stirato in larghezza); se il confine successivo e' a 1 h, l'etichetta va a sinistra della linea
+    this.$('.bl').innerHTML = bounds.map((hr, k) => { const left = bounds[k + 1] != null && bounds[k + 1] - hr <= 1;
+      return `<span style="left:${hr / 24 * 100}%;color:${bc[startBand[hr]]};transform:${left ? 'translateX(calc(-100% - 3px))' : 'translateX(3px)'}">${hr}</span>`; }).join('');
     // eventi: intervalli in cui l'entità è "on" o supera la soglia
     const lanes = evs.map((e) => {
       const st = hist[e.entity] || [];
@@ -453,7 +482,13 @@ class EnergiaDayCard extends Base {
     this.$('.ev').innerHTML = lanes.map((l) => `<div class="lane">${l.segs.map(([a, b]) =>
       `<span title="${l.name}" style="left:${(a - d0) / 864e5 * 100}%;width:${Math.max(0.6, (b - a) / 864e5 * 100)}%;background:${l.color}"></span>`).join('')}</div>`).join('');
     const pr = c.prezzi.map((id) => num(h, id));
-    this.$('.lg').innerHTML = [0, 1, 2].map((i) => `<span><i style="background:${bc[i]};opacity:.6"></i>F${i + 1} ${pr[i] != null ? nf(pr[i], 3) : ''}</span>`).join('')
+    // intervalli orari di ogni fascia nel giorno mostrato; quello a cavallo della mezzanotte si legge "23–7"
+    const rng = (i) => {
+      const sg = runs.filter((r) => r.b === i).map((r) => [r.s, r.e]);
+      if (sg.length > 1 && sg[0][0] === 0 && sg[sg.length - 1][1] === 24) { const l = sg.pop(); sg[0] = [l[0], sg[0][1]]; }
+      return sg.map(([a, b]) => `${a}–${b}`).join(', ') || '—';
+    };
+    this.$('.lg').innerHTML = [0, 1, 2].map((i) => `<span><i style="background:${bc[i]};opacity:.6"></i>F${i + 1} <b>${rng(i)}</b>${pr[i] != null ? ` <span class="muted">${nf(pr[i], 3)} €/kWh</span>` : ''}</span>`).join('')
       + lanes.map((l) => `<span><i style="background:${l.color}"></i>${l.name}</span>`).join('');
     // intestazione
     const dl = this._off === 0 ? 'Oggi' : this._off === 1 ? 'Ieri' : d0.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' });
