@@ -8,6 +8,13 @@ home server, VPS) esposto su Internet tramite **Tailscale Funnel**:
 - nessun servizio a pagamento (il consumo Fleet API rientra nello sconto mensile Tesla per uso personale);
 - l'auto non viene mai svegliata per leggere i dati: è lei che invia i campi quando cambiano.
 
+Il repository contiene gli script di setup (PC di amministrazione + server), la configurazione del server
+`fleet-telemetry`, la *discovery* MQTT per Home Assistant e alcune card Lovelace (profilo dell'auto, viaggi,
+statistiche, consumi elettrici di casa).
+
+> **Nota:** progetto personale, non affiliato né approvato da Tesla, Inc. L'uso della Fleet API è soggetto
+> ai termini di developer.tesla.com. Tutti i valori di esempio (domini, IP, VIN) sono fittizi.
+
 ---
 
 ## Indice
@@ -31,6 +38,7 @@ home server, VPS) esposto su Internet tramite **Tailscale Funnel**:
 17. [Costi](#costi)
 18. [Alternative scartate](#alternative-scartate)
 19. [Riferimenti](#riferimenti)
+20. [Licenza](#licenza)
 
 ---
 
@@ -167,6 +175,7 @@ sequenceDiagram
 ```
 .
 ├── README.md                  questo file
+├── LICENSE                    licenza MIT
 ├── CLAUDE.md                  regole, punti critici e procedure (per persone e per Claude Code)
 ├── config.env.example         modello della configurazione → copiare in config.env (non versionato)
 ├── credentials.env.example    modello per client_id/secret → credentials.env (non versionato)
@@ -179,19 +188,20 @@ sequenceDiagram
 ├── 04-telemetry-config.sh     catena CA, compila/avvia proxy, invia config firmata, attende sync
 ├── 05-telemetry-status.sh     stato config sull'auto + errori telemetria
 ├── token.sh                   stampa un access token valido (refresh automatico + rotazione)
-└── server/
-    ├── setup.sh               installazione/aggiornamento sul server (idempotente)
-    ├── docker-compose.yml     container fleet-telemetry (solo 127.0.0.1)
-    ├── config.template.json   config fleet-telemetry (MQTT compilato da setup.sh)
-    ├── renew-cert.sh          rinnovo certificato + restart solo se cambiato
-    └── www/                   file statici serviti da Funnel su :443
-        ├── index.txt
-        └── callback.html      mostra il code OAuth
+├── server/
+│   ├── setup.sh               installazione/aggiornamento sul server (idempotente)
+│   ├── docker-compose.yml     container fleet-telemetry (solo 127.0.0.1)
+│   ├── config.template.json   config fleet-telemetry (MQTT compilato da setup.sh)
+│   ├── renew-cert.sh          rinnovo certificato + restart solo se cambiato
+│   └── www/                   file statici serviti da Funnel su :443
+│       ├── index.txt
+│       └── callback.html      mostra il code OAuth
 └── ha/                        lato Home Assistant
     ├── discovery.py           genera il messaggio MQTT discovery (dispositivo "Tesla" + 54 entità)
     ├── dashboard/
     │   ├── tesla-car-card.yaml  card button-card: profilo dell'auto con i dati agganciati sopra
-    │   └── tesla-cards.js     card JS: viaggi (mappa + elenco) e statistiche (km, costi, energia)
+    │   ├── tesla-cards.js     card JS: viaggi (mappa + elenco) e statistiche (km, costi, energia)
+    │   └── energia-cards.js   card JS: consumi elettrici di casa a fasce F1/F2/F3 (Tesla, clima, casa)
     └── assets/
         └── model3_side.webp   immagine di esempio (da sostituire con la propria auto)
 ```
@@ -275,7 +285,7 @@ Aggiungere un login è additivo: gli altri client MQTT non sono toccati.
 ### 3. Chiavi e configurazione (PC admin)
 
 ```bash
-git clone <questo-repo> tesla-fleet && cd tesla-fleet
+git clone https://github.com/francecesco/tesla_streaming_mqtt.git tesla-fleet && cd tesla-fleet
 cp config.env.example config.env        # compila TESLA_DOMAIN, MQTT_BROKER, ...
 ./00-keys.sh                            # genera private-key.pem e public-key.pem
 ```
@@ -445,7 +455,7 @@ Due card senza dipendenze HACS:
   a 12 mesi dalle statistiche a lungo termine (tocca la curva per il valore di un mese).
 
 Installazione: copia il file in `/config/www/tesla/`, poi *Impostazioni → Dashboard → Risorse →*
-`/local/tesla/tesla-cards.js?v=1.0.2` (JavaScript module). Ad ogni aggiornamento copia **prima** il file e
+`/local/tesla/tesla-cards.js?v=1.1.0` (JavaScript module). Ad ogni aggiornamento copia **prima** il file e
 **poi** cambia `?v=`. Esempio:
 
 ```yaml
@@ -468,6 +478,35 @@ auto intera, ripresa da 6–8 m con zoom 2x all'altezza del centro dell'auto; po
 - se proporzioni o inquadratura cambiano, ricalibra le coordinate `chip(x, y, …)` nella card
   (percentuali dell'immagine: ruote, maniglia, vetro, sportello);
 - incrementa `?v=` nell'URL dell'immagine: i file `/local` restano in cache 31 giorni.
+
+### 4. Energia di casa (`ha/dashboard/energia-cards.js`)
+
+Card opzionali, indipendenti dalla telemetria, per chi ha una tariffa a fasce **F1/F2/F3** e misura i
+consumi con un contatore generale più sotto-contatori (ricarica Tesla, climatizzatore). Poiché i
+sotto-contatori sono già compresi nel generale, "Casa" = totale − Tesla − clima.
+
+| Card | Contenuto |
+|---|---|
+| `custom:energia-summary-card` | bolletta stimata del mese scomposta (Tesla / clima / casa / quota fissa), kWh per fascia |
+| `custom:energia-flow-card` | dove va l'energia del mese + chi sta consumando adesso |
+| `custom:energia-day-card` | potenza nelle 24 ore su sfondo colorato per fascia |
+| `custom:energia-mesi-card` | ultimi 12 mesi: spesa in € e kWh a colonne (statistiche a lungo termine) |
+| `custom:energia-colonne-card` | contenitore: card affiancate in colonne della stessa altezza |
+
+Installazione come `tesla-cards.js` (risorsa `/local/tesla/energia-cards.js?v=<E_VERSION>`). Le entità
+predefinite sono in `DEF` all'inizio del file e riflettono l'installazione dell'autore: **ogni chiave si
+può sovrascrivere dalla configurazione della card** con le proprie entità (sensori di energia
+`total_increasing`, `input_number` con i prezzi per fascia, sensore della fascia corrente, ecc.):
+
+```yaml
+type: custom:energia-colonne-card
+colonne:
+  - - type: custom:energia-summary-card
+      bolletta: sensor.<bolletta_stimata_mese>
+      prezzi: [input_number.<prezzo_f1>, input_number.<prezzo_f2>, input_number.<prezzo_f3>]
+  - - type: custom:energia-flow-card
+    - type: custom:energia-day-card
+```
 
 ---
 
@@ -563,3 +602,10 @@ Tailscale Funnel è incluso nel piano gratuito.
 - Campi disponibili: <https://github.com/teslamotors/fleet-telemetry/blob/main/protos/vehicle_data.proto>
 - Tailscale Funnel: <https://tailscale.com/kb/1223/funnel> · CLI: <https://tailscale.com/kb/1311/tailscale-funnel>
 - Billing e limiti: <https://developer.tesla.com/docs/fleet-api/billing-and-limits>
+
+---
+
+## Licenza
+
+[MIT](LICENSE). Il software è fornito "così com'è", senza garanzie: l'invio di configurazioni
+all'auto e la gestione delle chiavi sono sotto la responsabilità di chi lo usa.

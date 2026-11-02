@@ -40,3 +40,8 @@ certs/
 ha/assets/*.png
 # file generati dall'app Claude nella cartella di lavoro
 Claude outputs/
+
+# ── Varie ─────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.bak
