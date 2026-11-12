@@ -5,7 +5,7 @@
   "json_log_enable": true,
   "namespace": "tesla",
   "reliable_ack": false,
-  "rate_limit": { "enabled": true, "message_interval_time": 30, "message_limit": 1000 },
+  "rate_limit": { "enabled": false, "message_interval_time": 30, "message_limit": 1000 },
   "records": {
     "V": ["mqtt"],
     "alerts": ["mqtt"],

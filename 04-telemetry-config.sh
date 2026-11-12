@@ -52,15 +52,19 @@ echo "   proxy attivo su https://localhost:$PROXY_PORT (pid $PROXY_PID)"
 
 # ---------------------------------------------------------------- 3. payload
 echo "3) Payload ($HOST:$PORT, scadenza +$CONFIG_EXP_DAYS giorni)"
-python3 - "$VIN" "$HOST" "$PORT" "$CONFIG_EXP_DAYS" > .telemetry-config.json <<'PY'
+python3 - "$VIN" "$HOST" "$PORT" "$CONFIG_EXP_DAYS" "${TELEMETRY_DELIVERY_POLICY-latest}" > .telemetry-config.json <<'PY'
 import json, sys, time
-vin, host, port, days = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
+vin, host, port, days, policy = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
 fields = {k: v for k, v in json.load(open("fields.json")).items() if not k.startswith("_")}
 cfg = {"hostname": host, "port": port, "ca": open("certs/ca.pem").read(), "fields": fields,
        "alert_types": ["service"], "exp": int(time.time()) + days * 86400}
+# delivery_policy "latest": l'auto rinvia i dati non confermati dal server (es. inviati su una
+# connessione morta al passaggio LTE -> Wi-Fi). Richiede fleet-telemetry >= 0.7.1.
+if policy:
+    cfg["delivery_policy"] = policy
 json.dump({"vins": [vin], "config": cfg}, sys.stdout, indent=1)
 PY
-python3 -c 'import json;c=json.load(open(".telemetry-config.json"))["config"];print("   campi:",len(c["fields"]),"| exp:",c["exp"],"| certificati in ca:",c["ca"].count("BEGIN CERTIFICATE"))'
+python3 -c 'import json;c=json.load(open(".telemetry-config.json"))["config"];print("   campi:",len(c["fields"]),"| delivery_policy:",c.get("delivery_policy","(predefinita)"),"| exp:",c["exp"],"| certificati in ca:",c["ca"].count("BEGIN CERTIFICATE"))'
 
 # ---------------------------------------------------------------- 4. invio firmato
 echo "4) POST fleet_telemetry_config via proxy"

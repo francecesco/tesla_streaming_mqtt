@@ -386,6 +386,14 @@ Sul broker: iscriviti a `tesla/#` (in HA: Impostazioni → Dispositivi e servizi
    Nomi validi: `enum Field` in [`protos/vehicle_data.proto`](https://github.com/teslamotors/fleet-telemetry/blob/main/protos/vehicle_data.proto).
 2. Auto sveglia → `./04-telemetry-config.sh`. Un nome errato produce un errore 4xx esplicito.
 
+`04` invia anche `delivery_policy` (da `TELEMETRY_DELIVERY_POLICY` in `config.env`, predefinito `latest`):
+l'auto rinvia i dati che il server non ha confermato. Senza, i messaggi spediti su una connessione
+morta che l'auto non ha ancora rilevato (tipico all'arrivo a casa, al passaggio LTE → Wi-Fi) vanno persi,
+e poiché ogni campo parte **solo quando cambia**, uno stato perso (es. `DetailedChargeState` al
+collegamento del cavo) resta sbagliato fino al cambio successivo. Il server ha `rate_limit` disattivato
+per lo stesso motivo: oltre il limite `fleet-telemetry` scarta i messaggi, e un'auto che rinvia
+un arretrato dopo una disconnessione può superarlo. Con un solo veicolo autenticato via mTLS non serve.
+
 Il `fields.json` incluso (44 campi) copre: posizione, velocità, marcia, direzione, odometro, navigazione;
 SoC, autonomie, energia residua, tensione/corrente del pacco, temperature dei moduli; stato e parametri di
 ricarica AC/DC (potenza, energia immessa, ampere, tensione, fasi, limite, tempo residuo, sportello, cavo,
@@ -556,6 +564,7 @@ reali: Docker + Compose v2, Tailscale **nativo** con Funnel, raggiungibilità de
 | `sudo: ./setup.sh: command not found` | bit eseguibile perso nella copia | `sudo bash ./setup.sh` |
 | Ogni `cd` nella cartella chiede "dotenv: Source it?" (oh-my-zsh) | il plugin `dotenv` carica i file `.env` | qui non ci sono `.env`: i file si chiamano `config.env`/`credentials.env` |
 | Nessun messaggio MQTT | auto addormentata, config non sincronizzata o MQTT KO | `05-telemetry-status.sh`, `docker logs fleet-telemetry`, log del broker |
+| Un campo di stato resta fermo (es. `DetailedChargeState` a "Disconnected" mentre l'auto carica) mentre i valori numerici arrivano | messaggi persi su una connessione morta o scartati dal rate limit; il campo non viene rinviato finché non cambia | `delivery_policy: latest` (`04`), `rate_limit` disattivato; nelle automazioni non basarsi su un solo campo di stato (in HA: "in carica" anche da `ACChargingPower` > 0) |
 
 ---
 
